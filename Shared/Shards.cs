@@ -1,4 +1,6 @@
-﻿namespace ArticleService.Data;
+﻿using CommentService.Data;
+
+namespace ArticleService.Data;
 
 
 public static class Shards

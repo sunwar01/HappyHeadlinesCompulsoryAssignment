@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 10s
+
+scrape_configs:
+  - job_name: 'article-services'
+    static_configs:
+      - targets: ['article-service-1:8080','article-service-2:8080','article-service-3:8080']
+    metrics_path: /metrics
+
+  - job_name: 'comment-services'
+    static_configs:
+      - targets: ['comment-service-1:8080','comment-service-2:8080','comment-service-3:8080']
+    metrics_path: /metrics
