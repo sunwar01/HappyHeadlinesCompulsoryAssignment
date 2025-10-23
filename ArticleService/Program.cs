@@ -42,11 +42,9 @@ var app = builder.Build();
 _ = MonitorService.Log;
 
 
-//if (app.Environment.IsDevelopment())
-//{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-//}
+app.UseSwagger();
+app.UseSwaggerUI();
+
 
 
 app.UseSerilogRequestLogging();
