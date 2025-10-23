@@ -66,7 +66,7 @@ jobs:
           context: .
           file: ./ArticleService/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository }}/articleservice:${{ env.VERSION }}
+          tags: ghcr.io/${{ github.repository_owner }}/${{ toLower(github.repository_name) }}/articleservice:${{ env.VERSION }}
           platforms: linux/amd64
 
       - name: Build and push CommentService Docker image
@@ -75,5 +75,5 @@ jobs:
           context: .
           file: ./CommentService/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository }}/commentservice:${{ env.VERSION }}
+          tags: ghcr.io/${{ github.repository_owner }}/${{ toLower(github.repository_name) }}/commentservice:${{ env.VERSION }}
           platforms: linux/amd64
