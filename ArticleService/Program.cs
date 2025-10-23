@@ -33,9 +33,7 @@ builder.Services.AddSingleton<IArticleCache>(sp =>
     return new RedisArticleCache(mux, TimeSpan.FromMinutes(30));
 });
 
-// run preloader every 10 minutes
-builder.Services.AddHostedService(sp =>
-    new ArticleCachePreloader(sp, TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(30)));
+
 
 
 

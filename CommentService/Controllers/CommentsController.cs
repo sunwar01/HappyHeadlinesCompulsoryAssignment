@@ -31,7 +31,7 @@ public class CommentsController : ControllerBase
         new CounterConfiguration { LabelNames = new[] { "region", "endpoint" } });
 
     private static readonly Counter CommentCacheMisses = Metrics.CreateCounter(
-        "comment_cache_misses_total", "Comment cache misses",
+        "comment_cache_miss_total", "Comment cache misses",
         new CounterConfiguration { LabelNames = new[] { "region", "endpoint" } });
 
     private static readonly ConcurrentDictionary<string, bool> SchemaReady = new();

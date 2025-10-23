@@ -28,8 +28,10 @@ public class ArticlesController : ControllerBase
         new CounterConfiguration { LabelNames = new[] { "region", "endpoint" } });
 
     private static readonly Counter ArticleCacheMisses = Metrics.CreateCounter(
-        "article_cache_misses_total", "Article cache misses",
+        "article_cache_misses_total",               
+        "Article cache misses",
         new CounterConfiguration { LabelNames = new[] { "region", "endpoint" } });
+
 
     public ArticlesController(IConfiguration cfg, IConnectionMultiplexer redis)
     {
@@ -155,8 +157,7 @@ public class ArticlesController : ControllerBase
                 .Skip(skip).Take(take)
                 .ToListAsync(ct);
 
-            // We didn't return from cache path -> count one miss event for this list call
-            ArticleCacheMisses.Labels(region, "list").Inc();
+            ArticleCacheMisses.Labels(region, "list").Inc(items.Count);
 
             // Best-effort warmup
             try
