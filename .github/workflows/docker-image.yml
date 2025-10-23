@@ -54,13 +54,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract version and lowercase repo name
+      - name: Extract version
         id: extract_version
         run: |
           VERSION=$(date +%Y%m%d%H%M%S)-${{ github.sha }}
-          REPO_NAME=$(echo "${{ github.repository_name }}" | tr '[:upper:]' '[:lower:]')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
+          echo "Debug: VERSION=$VERSION"
 
       - name: Build and push ArticleService Docker image
         uses: docker/build-push-action@v6
@@ -68,7 +67,7 @@ jobs:
           context: .
           file: ./ArticleService/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/${{ env.REPO_NAME }}/articleservice:${{ env.VERSION }}
+          tags: ghcr.io/sunwar01/happyheadlinescompulsoryassignment/articleservice:${{ env.VERSION }}
           platforms: linux/amd64
 
       - name: Build and push CommentService Docker image
@@ -77,5 +76,5 @@ jobs:
           context: .
           file: ./CommentService/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/${{ env.REPO_NAME }}/commentservice:${{ env.VERSION }}
+          tags: ghcr.io/sunwar01/happyheadlinescompulsoryassignment/commentservice:${{ env.VERSION }}
           platforms: linux/amd64
