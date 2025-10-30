@@ -1,5 +1,3 @@
-# docker-compose.yml  (copy-paste ready)
-
 services:
   # --- ArticleService (x-axis: 3 instances) ---
   article-service-1:
@@ -22,6 +20,8 @@ services:
       - australia-db
       - antarctica-db
       - redis
+    networks:
+      - app-net
 
   article-service-2:
     build:
@@ -43,6 +43,8 @@ services:
       - australia-db
       - antarctica-db
       - redis
+    networks:
+      - app-net
 
   article-service-3:
     build:
@@ -65,6 +67,8 @@ services:
       - australia-db
       - antarctica-db
       - redis
+    networks:
+      - app-net
 
   # --- CommentService (x-axis: 3 instances) ---
   comment-service-1:
@@ -87,6 +91,8 @@ services:
       - australia-db
       - antarctica-db
       - redis
+    networks:
+      - app-net
 
   comment-service-2:
     build:
@@ -108,6 +114,8 @@ services:
       - australia-db
       - antarctica-db
       - redis
+    networks:
+      - app-net
 
   comment-service-3:
     build:
@@ -130,6 +138,8 @@ services:
       - australia-db
       - antarctica-db
       - redis
+    networks:
+      - app-net
 
   # --- Load balancer ---
   lb:
@@ -146,6 +156,8 @@ services:
       - comment-service-1
       - comment-service-2
       - comment-service-3
+    networks:
+      - app-net
 
   # --- Postgres shards (z-axis: 7 continents + global) ---
   global-db:
@@ -157,6 +169,8 @@ services:
       POSTGRES_DB: articles
     volumes:
       - global-data:/var/lib/postgresql/data
+    networks:
+      - app-net
 
   europe-db:
     image: postgres:16-alpine
@@ -167,6 +181,8 @@ services:
       POSTGRES_DB: articles
     volumes:
       - europe-data:/var/lib/postgresql/data
+    networks:
+      - app-net
 
   asia-db:
     image: postgres:16-alpine
@@ -177,6 +193,8 @@ services:
       POSTGRES_DB: articles
     volumes:
       - asia-data:/var/lib/postgresql/data
+    networks:
+      - app-net
 
   africa-db:
     image: postgres:16-alpine
@@ -187,6 +205,8 @@ services:
       POSTGRES_DB: articles
     volumes:
       - africa-data:/var/lib/postgresql/data
+    networks:
+      - app-net
 
   northamerica-db:
     image: postgres:16-alpine
@@ -197,6 +217,8 @@ services:
       POSTGRES_DB: articles
     volumes:
       - northamerica-data:/var/lib/postgresql/data
+    networks:
+      - app-net
 
   southamerica-db:
     image: postgres:16-alpine
@@ -207,6 +229,8 @@ services:
       POSTGRES_DB: articles
     volumes:
       - southamerica-data:/var/lib/postgresql/data
+    networks:
+      - app-net
 
   australia-db:
     image: postgres:16-alpine
@@ -217,6 +241,8 @@ services:
       POSTGRES_DB: articles
     volumes:
       - australia-data:/var/lib/postgresql/data
+    networks:
+      - app-net
 
   antarctica-db:
     image: postgres:16-alpine
@@ -227,6 +253,8 @@ services:
       POSTGRES_DB: articles
     volumes:
       - antarctica-data:/var/lib/postgresql/data
+    networks:
+      - app-net
 
   # --- Observability ---
   zipkin:
@@ -234,6 +262,8 @@ services:
     container_name: zipkin
     ports:
       - "9411:9411"
+    networks:
+      - app-net
 
   seq:
     image: datalust/seq:2024.3
@@ -242,6 +272,8 @@ services:
       - ACCEPT_EULA=Y
     ports:
       - "5341:80"
+    networks:
+      - app-net
 
   # --- Redis (cache) ---
   redis:
@@ -252,6 +284,8 @@ services:
       - "6379:6379"
     volumes:
       - redis-data:/data
+    networks:
+      - app-net
 
   # --- Prometheus (metrics) ---
   prometheus:
@@ -273,8 +307,31 @@ services:
       - comment-service-1
       - comment-service-2
       - comment-service-3
+    networks:
+      - app-net
 
-# Named volumes
+  # --- Grafana ---
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - app-net
+
+# --- Networks ---
+networks:
+  app-net:
+    driver: bridge
+
+# --- Volumes ---
 volumes:
   global-data:
   europe-data:
@@ -286,3 +343,4 @@ volumes:
   antarctica-data:
   redis-data:
   prometheus-data:
+  grafana-data:

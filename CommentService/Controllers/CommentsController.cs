@@ -14,39 +14,52 @@ using ILogger = Serilog.ILogger;
 namespace CommentService.Controllers;
 
 [ApiController]
-[Route("api/{region}/articles/{articleId:guid}/comments")]
+[Route("api/{region}/articles/{articleId:guid}/[controller]")]
 public class CommentsController : ControllerBase
 {
     private readonly ShardMap _shards;
     private readonly IDatabase _cache;
     private static readonly ILogger Log = MonitorService.Log.ForContext<CommentsController>();
 
-    private const int Capacity = 30; // per region LRU capacity
+    private const int Capacity = 30;
     private static readonly TimeSpan CommentsTtl = TimeSpan.FromHours(12);
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
-    // ---- Prometheus counters ----
+    // ── PROMETHEUS METRICS ─────────────────────────────────────────────────────
     private static readonly Counter CommentCacheHits = Metrics.CreateCounter(
         "comment_cache_hits_total", "Comment cache hits",
         new CounterConfiguration { LabelNames = new[] { "region", "endpoint" } });
 
     private static readonly Counter CommentCacheMisses = Metrics.CreateCounter(
-        "comment_cache_miss_total", "Comment cache misses",
+        "comment_cache_misses_total", "Comment cache misses",
+        new CounterConfiguration { LabelNames = new[] { "region", "endpoint" } });
+
+    private static readonly Histogram RequestDuration = Metrics.CreateHistogram(
+        "comment_request_duration_seconds",
+        "Duration of HTTP requests in CommentsController",
+        new HistogramConfiguration
+        {
+            LabelNames = new[] { "region", "method", "endpoint", "status" },
+            Buckets = Histogram.ExponentialBuckets(0.005, 2, 12)
+        });
+
+    private static readonly Counter HttpErrors = Metrics.CreateCounter(
+        "comment_http_errors_total", "HTTP 5xx responses",
         new CounterConfiguration { LabelNames = new[] { "region", "endpoint" } });
 
     private static readonly ConcurrentDictionary<string, bool> SchemaReady = new();
 
     private const string Ddl = """
-CREATE TABLE IF NOT EXISTS public."Comments" (
-    "Id" uuid PRIMARY KEY,
-    "ArticleId" uuid NOT NULL,
-    "Author" varchar(120) NOT NULL,
-    "Text" varchar(4000) NOT NULL,
-    "Continent" varchar(16) NOT NULL,
-    "CreatedAt" timestamptz NOT NULL
-);
-CREATE INDEX IF NOT EXISTS "IX_Comments_ArticleId" ON public."Comments" ("ArticleId");
-""";
+        CREATE TABLE IF NOT EXISTS public."Comments" (
+            "Id" uuid PRIMARY KEY,
+            "ArticleId" uuid NOT NULL,
+            "Author" varchar(120) NOT NULL,
+            "Text" varchar(4000) NOT NULL,
+            "Continent" varchar(16) NOT NULL,
+            "CreatedAt" timestamptz NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS "IX_Comments_ArticleId" ON public."Comments" ("ArticleId");
+        """;
 
     public CommentsController(IConfiguration cfg, IConnectionMultiplexer redis)
     {
@@ -60,19 +73,6 @@ CREATE INDEX IF NOT EXISTS "IX_Comments_ArticleId" ON public."Comments" ("Articl
 
     private static string ListKey(string region, Guid articleId) => $"comments:{region}:{articleId}";
     private static string LruKey(string region) => $"comments:lru:{region}";
-
-    private static async Task EnsureShardSchemaAsync(string cs, CancellationToken ct)
-    {
-        if (SchemaReady.ContainsKey(cs)) return;
-
-        await using var conn = new NpgsqlConnection(cs);
-        await conn.OpenAsync(ct);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = Ddl;
-        await cmd.ExecuteNonQueryAsync(ct);
-
-        SchemaReady.TryAdd(cs, true);
-    }
 
     private CommentDbContext Ctx(string region)
     {
@@ -100,230 +100,316 @@ CREATE INDEX IF NOT EXISTS "IX_Comments_ArticleId" ON public."Comments" ("Articl
         foreach (var v in victims)
         {
             if (Guid.TryParse(v!, out var aid))
-            {
                 await _cache.KeyDeleteAsync(ListKey(region, aid));
-            }
         }
 
         if (victims.Length > 0)
             await _cache.SortedSetRemoveRangeByRankAsync(lru, 0, victims.Length - 1);
     }
 
-    // GET /api/{region}/articles/{articleId}/comments
+    // ── Measure: latency + error tracking ─────────────────────────────────────
+    private async Task<ActionResult<T>> Measure<T>(string endpoint,
+        Func<CancellationToken, Task<ActionResult<T>>> work,
+        CancellationToken ct = default)
+    {
+        var region = (string)RouteData.Values["region"]!;
+        var method = HttpContext.Request.Method;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        try
+        {
+            var result = await work(ct);
+            var status = result switch
+            {
+                ObjectResult obj => obj.StatusCode?.ToString() ?? "200",
+                StatusCodeResult sc => sc.StatusCode.ToString(),
+                _ => "200"
+            };
+
+            RequestDuration.WithLabels(region, method, endpoint, status)
+                           .Observe(sw.Elapsed.TotalSeconds);
+            if (status.StartsWith('5'))
+                HttpErrors.WithLabels(region, endpoint).Inc();
+
+            return result;
+        }
+        catch (Exception ex) when (!(ex is OperationCanceledException))
+        {
+            RequestDuration.WithLabels(region, method, endpoint, "500")
+                           .Observe(sw.Elapsed.TotalSeconds);
+            HttpErrors.WithLabels(region, endpoint).Inc();
+            throw;
+        }
+    }
+
+    private async Task<IActionResult> Measure(string endpoint,
+        Func<CancellationToken, Task<IActionResult>> work,
+        CancellationToken ct = default)
+    {
+        var region = (string)RouteData.Values["region"]!;
+        var method = HttpContext.Request.Method;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        try
+        {
+            var result = await work(ct);
+            var status = result switch
+            {
+                ObjectResult obj => obj.StatusCode?.ToString() ?? "200",
+                StatusCodeResult sc => sc.StatusCode.ToString(),
+                _ => "200"
+            };
+
+            RequestDuration.WithLabels(region, method, endpoint, status)
+                           .Observe(sw.Elapsed.TotalSeconds);
+            if (status.StartsWith('5'))
+                HttpErrors.WithLabels(region, endpoint).Inc();
+
+            return result;
+        }
+        catch (Exception ex) when (!(ex is OperationCanceledException))
+        {
+            RequestDuration.WithLabels(region, method, endpoint, "500")
+                           .Observe(sw.Elapsed.TotalSeconds);
+            HttpErrors.WithLabels(region, endpoint).Inc();
+            throw;
+        }
+    }
+
+    // ── GET /api/{region}/articles/{articleId}/comments ─────────────────────
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<Comment>>> List(
+    public Task<ActionResult<IEnumerable<Comment>>> List(
         [FromRoute] string region,
         [FromRoute] Guid articleId,
         [FromQuery] int skip = 0,
         [FromQuery] int take = 50,
         CancellationToken ct = default)
     {
-        var cs = Shards.PickConnection(region, _shards);
-        await EnsureShardSchemaAsync(cs, ct);
-
-        // Cache first (whole article list)
-        try
+        return Measure<IEnumerable<Comment>>("list", async token =>
         {
-            var blob = await _cache.StringGetAsync(ListKey(region, articleId));
-            if (blob.HasValue)
+            var cs = Shards.PickConnection(region, _shards);
+            await EnsureShardSchemaAsync(cs, token);
+
+            // Try cache first
+            List<Comment>? comments = null;
+            try
             {
-                CommentCacheHits.Labels(region, "list").Inc();
+                var blob = await _cache.StringGetAsync(ListKey(region, articleId));
+                if (blob.HasValue)
+                {
+                    CommentCacheHits.WithLabels(region, "list").Inc();
+                    comments = JsonSerializer.Deserialize<List<Comment>>(blob!, JsonOpts) ?? new();
+                    await TouchLruAsync(region, articleId);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "Comment list cache get failed");
+            }
 
-                var all = JsonSerializer.Deserialize<List<Comment>>(blob!, JsonOpts) ?? new();
-                await TouchLruAsync(region, articleId);
-
-                var paged = all
+            // Use cached data if available
+            if (comments != null)
+            {
+                var result = comments
                     .OrderByDescending(c => c.CreatedAt)
                     .Skip(skip)
                     .Take(Math.Clamp(take, 1, 200))
                     .ToList();
 
-                return Ok(paged);
+                return Ok(result);
             }
-        }
-        catch (Exception ex)
-        {
-            Log.Debug(ex, "Comment list cache get failed");
-        }
 
-        CommentCacheMisses.Labels(region, "list").Inc();
+            // Cache miss → DB
+            CommentCacheMisses.WithLabels(region, "list").Inc();
 
-        // Miss -> DB, then cache whole list
-        await using (var db = Ctx(region))
-        {
-            var all = await db.Comments.AsNoTracking()
+            await using var db = Ctx(region);
+            var dbComments = await db.Comments.AsNoTracking()
                 .Where(c => c.ArticleId == articleId)
                 .OrderByDescending(c => c.CreatedAt)
-                .ToListAsync(ct);
+                .ToListAsync(token);
 
-            // Best-effort populate + LRU
+            // Warm cache
             try
             {
                 await _cache.StringSetAsync(
                     ListKey(region, articleId),
-                    JsonSerializer.Serialize(all, JsonOpts),
+                    JsonSerializer.Serialize(dbComments, JsonOpts),
                     CommentsTtl);
-
                 await TouchLruAsync(region, articleId);
             }
-            catch { /* ignore */ }
+            catch { }
 
-            var paged = all
+            // Return paged result
+            var finalResult = dbComments
                 .Skip(skip)
                 .Take(Math.Clamp(take, 1, 200))
                 .ToList();
 
-            return Ok(paged);
-        }
+            return Ok(finalResult);
+        }, ct);
     }
 
-    // GET /api/{region}/articles/{articleId}/comments/{id}
+    // ── GET /api/{region}/articles/{articleId}/comments/{id} ─────────────────
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<Comment>> Get(
+    public Task<ActionResult<Comment>> Get(
         [FromRoute] string region,
         [FromRoute] Guid articleId,
         [FromRoute] Guid id,
         CancellationToken ct = default)
     {
-        var cs = Shards.PickConnection(region, _shards);
-        await EnsureShardSchemaAsync(cs, ct);
-
-        // Try cached list first
-        try
+        return Measure<Comment>("get", async token =>
         {
-            var blob = await _cache.StringGetAsync(ListKey(region, articleId));
-            if (blob.HasValue)
+            var cs = Shards.PickConnection(region, _shards);
+            await EnsureShardSchemaAsync(cs, token);
+
+            try
             {
-                var all = JsonSerializer.Deserialize<List<Comment>>(blob!, JsonOpts) ?? new();
-                var hit = all.FirstOrDefault(c => c.Id == id);
-                if (hit != null)
+                var blob = await _cache.StringGetAsync(ListKey(region, articleId));
+                if (blob.HasValue)
                 {
-                    CommentCacheHits.Labels(region, "get").Inc();
-                    await TouchLruAsync(region, articleId);
-                    return Ok(hit);
+                    var cached = JsonSerializer.Deserialize<List<Comment>>(blob!, JsonOpts) ?? new();
+                    var hit = cached.FirstOrDefault(c => c.Id == id);
+                    if (hit != null)
+                    {
+                        CommentCacheHits.WithLabels(region, "get").Inc();
+                        await TouchLruAsync(region, articleId);
+                        return Ok(hit);
+                    }
+                    CommentCacheMisses.WithLabels(region, "get").Inc();
                 }
-
-                // list cached but specific id not found -> miss for the id
-                CommentCacheMisses.Labels(region, "get").Inc();
             }
-        }
-        catch { /* ignore */ }
+            catch { }
 
-        // DB fallback
-        await using var db = Ctx(region);
+            await using var db = Ctx(region);
+            var item = await db.Comments
+                .FirstOrDefaultAsync(c => c.ArticleId == articleId && c.Id == id, token);
 
-        var item = await db.Comments
-            .FirstOrDefaultAsync(c => c.ArticleId == articleId && c.Id == id, ct);
+            if (item is null) return NotFound();
 
-        if (item is null) return NotFound();
-
-        try { await TouchLruAsync(region, articleId); } catch { /* ignore */ }
-
-        return Ok(item);
+            await TouchLruAsync(region, articleId);
+            return Ok(item);
+        }, ct);
     }
 
-    // POST /api/{region}/articles/{articleId}/comments
+    // ── POST /api/{region}/articles/{articleId}/comments ─────────────────────
     [HttpPost]
-    public async Task<IActionResult> Create(
+    public Task<IActionResult> Create(
         [FromRoute] string region,
         [FromRoute] Guid articleId,
         [FromBody] CommentCreateDto dto,
         CancellationToken ct = default)
     {
-        var cs = Shards.PickConnection(region, _shards);
-        await EnsureShardSchemaAsync(cs, ct);
-
-        await using var db = Ctx(region);
-
-        var entity = new Comment
+        return Measure("create", async token =>
         {
-            Id = Guid.NewGuid(),
-            ArticleId = articleId,
-            Author = dto.Author,
-            Text = dto.Text,
-            CreatedAt = dto.CreatedAt ?? DateTimeOffset.UtcNow,
-            Continent = region
-        };
+            var cs = Shards.PickConnection(region, _shards);
+            await EnsureShardSchemaAsync(cs, token);
 
-        db.Comments.Add(entity);
-        await db.SaveChangesAsync(ct);
+            await using var db = Ctx(region);
+            var entity = new Comment
+            {
+                Id = Guid.NewGuid(),
+                ArticleId = articleId,
+                Author = dto.Author,
+                Text = dto.Text,
+                CreatedAt = dto.CreatedAt ?? DateTimeOffset.UtcNow,
+                Continent = region
+            };
 
-        // Invalidate that article's cached list (cache-miss approach)
-        try
-        {
-            await _cache.KeyDeleteAsync(ListKey(region, articleId));
-            await _cache.SortedSetRemoveAsync(LruKey(region), articleId.ToString());
-        }
-        catch { /* ignore */ }
+            db.Comments.Add(entity);
+            await db.SaveChangesAsync(token);
 
-        return CreatedAtAction(nameof(Get), new { region, articleId, id = entity.Id }, entity);
+            try
+            {
+                await _cache.KeyDeleteAsync(ListKey(region, articleId));
+                await _cache.SortedSetRemoveAsync(LruKey(region), articleId.ToString());
+            }
+            catch { }
+
+            return CreatedAtAction(nameof(Get), new { region, articleId, id = entity.Id }, entity);
+        }, ct);
     }
 
-    // PUT /api/{region}/articles/{articleId}/comments/{id}
+    // ── PUT /api/{region}/articles/{articleId}/comments/{id} ─────────────────
     [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Update(
+    public Task<IActionResult> Update(
         [FromRoute] string region,
         [FromRoute] Guid articleId,
         [FromRoute] Guid id,
         [FromBody] CommentCreateDto dto,
         CancellationToken ct = default)
     {
-        var cs = Shards.PickConnection(region, _shards);
-        await EnsureShardSchemaAsync(cs, ct);
-
-        await using var db = Ctx(region);
-
-        var existing = await db.Comments
-            .FirstOrDefaultAsync(c => c.ArticleId == articleId && c.Id == id, ct);
-
-        if (existing is null) return NotFound();
-
-        existing.Author = dto.Author;
-        existing.Text = dto.Text;
-        existing.CreatedAt = dto.CreatedAt ?? existing.CreatedAt;
-
-        await db.SaveChangesAsync(ct);
-
-        // Invalidate cached list so next GET repopulates
-        try
+        return Measure("update", async token =>
         {
-            await _cache.KeyDeleteAsync(ListKey(region, articleId));
-            await _cache.SortedSetRemoveAsync(LruKey(region), articleId.ToString());
-        }
-        catch { /* ignore */ }
+            var cs = Shards.PickConnection(region, _shards);
+            await EnsureShardSchemaAsync(cs, token);
 
-        return NoContent();
+            await using var db = Ctx(region);
+            var existing = await db.Comments
+                .FirstOrDefaultAsync(c => c.ArticleId == articleId && c.Id == id, token);
+
+            if (existing is null) return NotFound();
+
+            existing.Author = dto.Author;
+            existing.Text = dto.Text;
+            existing.CreatedAt = dto.CreatedAt ?? existing.CreatedAt;
+
+            await db.SaveChangesAsync(token);
+
+            try
+            {
+                await _cache.KeyDeleteAsync(ListKey(region, articleId));
+                await _cache.SortedSetRemoveAsync(LruKey(region), articleId.ToString());
+            }
+            catch { }
+
+            return NoContent();
+        }, ct);
     }
 
-    // DELETE /api/{region}/articles/{articleId}/comments/{id}
+    // ── DELETE /api/{region}/articles/{articleId}/comments/{id} ─────────────
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(
+    public Task<IActionResult> Delete(
         [FromRoute] string region,
         [FromRoute] Guid articleId,
         [FromRoute] Guid id,
         CancellationToken ct = default)
     {
-        var cs = Shards.PickConnection(region, _shards);
-        await EnsureShardSchemaAsync(cs, ct);
-
-        await using var db = Ctx(region);
-
-        var entity = await db.Comments
-            .FirstOrDefaultAsync(c => c.ArticleId == articleId && c.Id == id, ct);
-
-        if (entity is null) return NotFound();
-
-        db.Comments.Remove(entity);
-        await db.SaveChangesAsync(ct);
-
-        // Invalidate cached list + LRU entry
-        try
+        return Measure("delete", async token =>
         {
-            await _cache.KeyDeleteAsync(ListKey(region, articleId));
-            await _cache.SortedSetRemoveAsync(LruKey(region), articleId.ToString());
-        }
-        catch { /* ignore */ }
+            var cs = Shards.PickConnection(region, _shards);
+            await EnsureShardSchemaAsync(cs, token);
 
-        return NoContent();
+            await using var db = Ctx(region);
+            var entity = await db.Comments
+                .FirstOrDefaultAsync(c => c.ArticleId == articleId && c.Id == id, token);
+
+            if (entity is null) return NotFound();
+
+            db.Comments.Remove(entity);
+            await db.SaveChangesAsync(token);
+
+            try
+            {
+                await _cache.KeyDeleteAsync(ListKey(region, articleId));
+                await _cache.SortedSetRemoveAsync(LruKey(region), articleId.ToString());
+            }
+            catch { }
+
+            return NoContent();
+        }, ct);
+    }
+
+    // ── Ensure schema exists once per shard ─────────────────────────────────
+    private static async Task EnsureShardSchemaAsync(string cs, CancellationToken ct)
+    {
+        if (SchemaReady.ContainsKey(cs)) return;
+
+        await using var conn = new NpgsqlConnection(cs);
+        await conn.OpenAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = Ddl;
+        await cmd.ExecuteNonQueryAsync(ct);
+
+        SchemaReady.TryAdd(cs, true);
     }
 }

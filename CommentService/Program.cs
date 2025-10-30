@@ -35,6 +35,7 @@ app.UseSwagger();
 app.UseSwaggerUI();
 app.UseSerilogRequestLogging();
 app.UseHttpMetrics(); 
+app.UseMetricServer();
 app.MapControllers();
 app.MapMetrics();  
 

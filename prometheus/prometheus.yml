@@ -1,13 +1,29 @@
 global:
-  scrape_interval: 10s
+  scrape_interval: 5s
+  scrape_timeout: 3s
+  evaluation_interval: 5s
 
 scrape_configs:
-  - job_name: 'article-services'
+  - job_name: prometheus
     static_configs:
-      - targets: ['article-service-1:8080','article-service-2:8080','article-service-3:8080']
-    metrics_path: /metrics
+      - targets: ['localhost:9090']
 
-  - job_name: 'comment-services'
-    static_configs:
-      - targets: ['comment-service-1:8080','comment-service-2:8080','comment-service-3:8080']
+  - job_name: article-service
     metrics_path: /metrics
+    static_configs:
+      - targets:
+          - article-service-1:8080
+          - article-service-2:8080
+          - article-service-3:8080
+        labels:
+          service: article
+
+  - job_name: comment-service
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - comment-service-1:8080
+          - comment-service-2:8080
+          - comment-service-3:8080
+        labels:
+          service: comment

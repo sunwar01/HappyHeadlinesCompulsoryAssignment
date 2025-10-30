@@ -51,6 +51,7 @@ app.UseSwaggerUI();
 
 app.UseSerilogRequestLogging();
 app.UseHttpMetrics();   
+app.UseMetricServer();
 app.MapControllers();
 app.MapMetrics();  
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
