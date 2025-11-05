@@ -27,6 +27,8 @@ jobs:
         run: |
           dotnet restore ArticleService/ArticleService.csproj
           dotnet restore CommentService/CommentService.csproj
+          dotnet restore SubscriberService/SubscriberService.csproj
+          dotnet restore NewsletterService/NewsletterService.csproj
 
       - name: Build ArticleService
         run: |
@@ -36,6 +38,14 @@ jobs:
         run: |
           dotnet build CommentService/CommentService.csproj --configuration Release --no-restore
 
+      - name: Build SubscriberService
+        run: |
+          dotnet build SubscriberService/SubscriberService.csproj --configuration Release --no-restore
+
+      - name: Build NewsletterService
+        run: |
+          dotnet build NewsletterService/NewsletterService.csproj --configuration Release --no-restore
+
       - name: Collect executables
         uses: actions/upload-artifact@v4
         with:
@@ -43,6 +53,8 @@ jobs:
           path: |
             ArticleService/bin/Release/
             CommentService/bin/Release/
+            SubscriberService/bin/Release/
+            NewsletterService/bin/Release/
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -77,4 +89,22 @@ jobs:
           file: ./CommentService/Dockerfile
           push: true
           tags: ghcr.io/sunwar01/happyheadlinescompulsoryassignment/commentservice:${{ env.VERSION }}
+          platforms: linux/amd64
+
+      - name: Build and push SubscriberService Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./SubscriberService/Dockerfile
+          push: true
+          tags: ghcr.io/sunwar01/happyheadlinescompulsoryassignment/subscriberservice:${{ env.VERSION }}
+          platforms: linux/amd64
+
+      - name: Build and push NewsletterService Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./NewsletterService/Dockerfile
+          push: true
+          tags: ghcr.io/sunwar01/happyheadlinescompulsoryassignment/newsletterservice:${{ env.VERSION }}
           platforms: linux/amd64
