@@ -1,0 +1,70 @@
+{
+  "title": "SubscriberService Dashboard",
+  "uid": "subscriber-service-dashboard",
+  "version": 3,
+  "refresh": "5s",
+  "panels": [
+    {
+      "title": "Subscribe Latency (P50/P95/P99)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "ff34t68qehypse" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+  {
+    "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"subscriber-service\", http_route=~\"/api/.*/Subscribers/subscribe\"}[5m])) by (le))",
+    "legendFormat": "P50",
+    "refId": "A"
+  },
+  {
+    "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"subscriber-service\", http_route=~\"/api/.*/Subscribers/subscribe\"}[5m])) by (le))",
+    "legendFormat": "P95",
+    "refId": "B"
+  },
+  {
+    "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"subscriber-service\", http_route=~\"/api/.*/Subscribers/subscribe\"}[5m])) by (le))",
+    "legendFormat": "P99",
+    "refId": "C"
+  }
+],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "title": "CPU Usage",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "ff34t68qehypse" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        { "expr": "avg(rate(process_cpu_seconds_total{job=\"subscriber-service\"}[5m])) * 100", "legendFormat": "CPU %", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    },
+    {
+      "title": "Memory (Working Set)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "ff34t68qehypse" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 4 },
+      "targets": [
+        { "expr": "avg(process_working_set_bytes{job=\"subscriber-service\"})", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+    {
+      "title": "Subscriber Services UP",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "ff34t68qehypse" },
+      "gridPos": { "h": 3, "w": 3, "x": 21, "y": 0 },
+      "targets": [
+        { "expr": "sum(up{job=\"subscriber-service\"})", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "1/3", "color": "red" }, "2": { "text": "2/3", "color": "yellow" }, "3": { "text": "3/3", "color": "green" } }, "type": "value" }
+          ],
+          "thresholds": { "steps": [ { "color": "red" }, { "color": "yellow", "value": 2 }, { "color": "green", "value": 3 } ] }
+        }
+      },
+      "options": { "text": { "valueSize": 28 } }
+    }
+  ]
+}

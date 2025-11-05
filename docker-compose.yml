@@ -22,7 +22,6 @@ services:
       - redis
     networks:
       - app-net
-
   article-service-2:
     build:
       context: .
@@ -45,7 +44,6 @@ services:
       - redis
     networks:
       - app-net
-
   article-service-3:
     build:
       context: .
@@ -69,7 +67,6 @@ services:
       - redis
     networks:
       - app-net
-
   # --- CommentService (x-axis: 3 instances) ---
   comment-service-1:
     build:
@@ -93,7 +90,6 @@ services:
       - redis
     networks:
       - app-net
-
   comment-service-2:
     build:
       context: .
@@ -116,7 +112,6 @@ services:
       - redis
     networks:
       - app-net
-
   comment-service-3:
     build:
       context: .
@@ -140,7 +135,115 @@ services:
       - redis
     networks:
       - app-net
-
+  # --- SubscriberService (x-axis: 3 instances) ---
+  subscriber-service-1:
+    build:
+      context: .
+      dockerfile: SubscriberService/Dockerfile
+    container_name: subscriber-service-1
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+      - SEQ__URL=http://seq:5341
+      - ZIPKIN__ENDPOINT=http://zipkin:9411/api/v2/spans
+      - ConnectionStrings__Redis=redis:6379
+      - Shards__ConnectionStrings__global=Host=global-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__europe=Host=europe-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__asia=Host=asia-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__africa=Host=africa-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__northamerica=Host=northamerica-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__southamerica=Host=southamerica-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__australia=Host=australia-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__antarctica=Host=antarctica-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+    depends_on:
+      - global-subscriber-db
+      - europe-subscriber-db
+      - asia-subscriber-db
+      - africa-subscriber-db
+      - northamerica-subscriber-db
+      - southamerica-subscriber-db
+      - australia-subscriber-db
+      - antarctica-subscriber-db
+      - redis
+    networks:
+      - app-net
+  subscriber-service-2:
+    build:
+      context: .
+      dockerfile: SubscriberService/Dockerfile
+    container_name: subscriber-service-2
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+      - SEQ__URL=http://seq:5341
+      - ZIPKIN__ENDPOINT=http://zipkin:9411/api/v2/spans
+      - ConnectionStrings__Redis=redis:6379
+      - FeatureToggles__EnableSubscriberService=true
+      - Shards__ConnectionStrings__global=Host=global-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__europe=Host=europe-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__asia=Host=asia-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__africa=Host=africa-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__northamerica=Host=northamerica-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__southamerica=Host=southamerica-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__australia=Host=australia-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__antarctica=Host=antarctica-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+    depends_on:
+      - global-subscriber-db
+      - europe-subscriber-db
+      - asia-subscriber-db
+      - africa-subscriber-db
+      - northamerica-subscriber-db
+      - southamerica-subscriber-db
+      - australia-subscriber-db
+      - antarctica-subscriber-db
+      - redis
+    networks:
+      - app-net
+  subscriber-service-3:
+    build:
+      context: .
+      dockerfile: SubscriberService/Dockerfile
+    container_name: subscriber-service-3
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+      - SEQ__URL=http://seq:5341
+      - ZIPKIN__ENDPOINT=http://zipkin:9411/api/v2/spans
+      - ConnectionStrings__Redis=redis:6379
+      - FeatureToggles__EnableSubscriberService=true
+      - INIT_SCHEMA=true
+      - Shards__ConnectionStrings__global=Host=global-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__europe=Host=europe-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__asia=Host=asia-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__africa=Host=africa-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__northamerica=Host=northamerica-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__southamerica=Host=southamerica-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__australia=Host=australia-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+      - Shards__ConnectionStrings__antarctica=Host=antarctica-subscriber-db;Port=5432;Database=subscribers;Username=postgres;Password=postgres
+    depends_on:
+      - global-subscriber-db
+      - europe-subscriber-db
+      - asia-subscriber-db
+      - africa-subscriber-db
+      - northamerica-subscriber-db
+      - southamerica-subscriber-db
+      - australia-subscriber-db
+      - antarctica-subscriber-db
+      - redis
+    networks:
+      - app-net
+  # --- NewsletterService (1 instance) ---
+  newsletter-service-1:
+    build:
+      context: .
+      dockerfile: NewsletterService/Dockerfile
+    container_name: newsletter-service-1
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+      - SEQ__URL=http://seq:5341
+      - ZIPKIN__ENDPOINT=http://zipkin:9411/api/v2/spans
+      - ConnectionStrings__Redis=redis:6379
+    depends_on:
+      - redis
+    networks:
+      - app-net
   # --- Load balancer ---
   lb:
     build:
@@ -156,9 +259,12 @@ services:
       - comment-service-1
       - comment-service-2
       - comment-service-3
+      - subscriber-service-1
+      - subscriber-service-2
+      - subscriber-service-3
+      - newsletter-service-1
     networks:
       - app-net
-
   # --- Postgres shards (z-axis: 7 continents + global) ---
   global-db:
     image: postgres:16-alpine
@@ -169,9 +275,9 @@ services:
       POSTGRES_DB: articles
     volumes:
       - global-data:/var/lib/postgresql/data
+      - ./ArticleService/migrations/init-articles.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
-
   europe-db:
     image: postgres:16-alpine
     container_name: europe-db
@@ -181,9 +287,9 @@ services:
       POSTGRES_DB: articles
     volumes:
       - europe-data:/var/lib/postgresql/data
+      - ./ArticleService/migrations/init-articles.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
-
   asia-db:
     image: postgres:16-alpine
     container_name: asia-db
@@ -193,9 +299,9 @@ services:
       POSTGRES_DB: articles
     volumes:
       - asia-data:/var/lib/postgresql/data
+      - ./ArticleService/migrations/init-articles.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
-
   africa-db:
     image: postgres:16-alpine
     container_name: africa-db
@@ -205,9 +311,9 @@ services:
       POSTGRES_DB: articles
     volumes:
       - africa-data:/var/lib/postgresql/data
+      - ./ArticleService/migrations/init-articles.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
-
   northamerica-db:
     image: postgres:16-alpine
     container_name: northamerica-db
@@ -217,9 +323,9 @@ services:
       POSTGRES_DB: articles
     volumes:
       - northamerica-data:/var/lib/postgresql/data
+      - ./ArticleService/migrations/init-articles.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
-
   southamerica-db:
     image: postgres:16-alpine
     container_name: southamerica-db
@@ -229,9 +335,9 @@ services:
       POSTGRES_DB: articles
     volumes:
       - southamerica-data:/var/lib/postgresql/data
+      - ./ArticleService/migrations/init-articles.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
-
   australia-db:
     image: postgres:16-alpine
     container_name: australia-db
@@ -241,9 +347,9 @@ services:
       POSTGRES_DB: articles
     volumes:
       - australia-data:/var/lib/postgresql/data
+      - ./ArticleService/migrations/init-articles.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
-
   antarctica-db:
     image: postgres:16-alpine
     container_name: antarctica-db
@@ -253,9 +359,106 @@ services:
       POSTGRES_DB: articles
     volumes:
       - antarctica-data:/var/lib/postgresql/data
+      - ./ArticleService/migrations/init-articles.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
-
+  # --- Subscriber DB shards (z-axis: 7 continents + global) ---
+  global-subscriber-db:
+    image: postgres:16-alpine
+    container_name: global-subscriber-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: subscribers
+    volumes:
+      - global-subscriber-data:/var/lib/postgresql/data
+      - ./SubscriberService/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-net
+  europe-subscriber-db:
+    image: postgres:16-alpine
+    container_name: europe-subscriber-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: subscribers
+    volumes:
+      - europe-subscriber-data:/var/lib/postgresql/data
+      - ./SubscriberService/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-net
+  asia-subscriber-db:
+    image: postgres:16-alpine
+    container_name: asia-subscriber-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: subscribers
+    volumes:
+      - asia-subscriber-data:/var/lib/postgresql/data
+      - ./SubscriberService/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-net
+  africa-subscriber-db:
+    image: postgres:16-alpine
+    container_name: africa-subscriber-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: subscribers
+    volumes:
+      - africa-subscriber-data:/var/lib/postgresql/data
+      - ./SubscriberService/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-net
+  northamerica-subscriber-db:
+    image: postgres:16-alpine
+    container_name: northamerica-subscriber-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: subscribers
+    volumes:
+      - northamerica-subscriber-data:/var/lib/postgresql/data
+      - ./SubscriberService/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-net
+  southamerica-subscriber-db:
+    image: postgres:16-alpine
+    container_name: southamerica-subscriber-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: subscribers
+    volumes:
+      - southamerica-subscriber-data:/var/lib/postgresql/data
+      - ./SubscriberService/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-net
+  australia-subscriber-db:
+    image: postgres:16-alpine
+    container_name: australia-subscriber-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: subscribers
+    volumes:
+      - australia-subscriber-data:/var/lib/postgresql/data
+      - ./SubscriberService/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-net
+  antarctica-subscriber-db:
+    image: postgres:16-alpine
+    container_name: antarctica-subscriber-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: subscribers
+    volumes:
+      - antarctica-subscriber-data:/var/lib/postgresql/data
+      - ./SubscriberService/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-net
   # --- Observability ---
   zipkin:
     image: openzipkin/zipkin:2.24
@@ -264,7 +467,6 @@ services:
       - "9411:9411"
     networks:
       - app-net
-
   seq:
     image: datalust/seq:2024.3
     container_name: seq
@@ -274,19 +476,17 @@ services:
       - "5341:80"
     networks:
       - app-net
-
   # --- Redis (cache) ---
   redis:
     image: redis:7-alpine
     container_name: redis
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    command: ["redis-server","--save","","--appendonly","no"]
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
     networks:
       - app-net
-
   # --- Prometheus (metrics) ---
   prometheus:
     image: prom/prometheus:v2.54.1
@@ -307,9 +507,12 @@ services:
       - comment-service-1
       - comment-service-2
       - comment-service-3
+      - subscriber-service-1
+      - subscriber-service-2
+      - subscriber-service-3
+      - newsletter-service-1
     networks:
       - app-net
-
   # --- Grafana ---
   grafana:
     image: grafana/grafana:latest
@@ -325,12 +528,10 @@ services:
       - prometheus
     networks:
       - app-net
-
 # --- Networks ---
 networks:
   app-net:
     driver: bridge
-
 # --- Volumes ---
 volumes:
   global-data:
@@ -341,6 +542,14 @@ volumes:
   southamerica-data:
   australia-data:
   antarctica-data:
+  global-subscriber-data:
+  europe-subscriber-data:
+  asia-subscriber-data:
+  africa-subscriber-data:
+  northamerica-subscriber-data:
+  southamerica-subscriber-data:
+  australia-subscriber-data:
+  antarctica-subscriber-data:
   redis-data:
   prometheus-data:
   grafana-data:

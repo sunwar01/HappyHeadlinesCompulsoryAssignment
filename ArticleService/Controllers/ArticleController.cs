@@ -316,7 +316,7 @@ public class ArticlesController : ControllerBase
                 Title = dto.Title,
                 Content = dto.Content,
                 PublishedAt = dto.PublishedAt ?? DateTimeOffset.UtcNow,
-                Continent = region,
+                ShardKey = region,
             };
 
             db.Articles.Add(entity);

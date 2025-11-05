@@ -17,8 +17,8 @@ public class Article
 
     
     [Required]
-    [MaxLength(16)] 
-    public string Continent { get; set; } = "global";
+    [MaxLength(16)]
+    public string ShardKey { get; set; } = "global";
 
 
     public DateTimeOffset PublishedAt { get; set; } = DateTimeOffset.UtcNow;

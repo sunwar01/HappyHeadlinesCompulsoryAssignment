@@ -13,13 +13,12 @@ public class ArticleDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<Article>(e =>
+        modelBuilder.Entity<Article>(entity =>
         {
-            e.HasKey(a => a.Id);
-            e.Property(a => a.Title).IsRequired().HasMaxLength(200);
-            e.Property(a => a.Continent).IsRequired().HasMaxLength(16);
-            e.HasIndex(a => a.PublishedAt);
-            e.HasIndex(a => new { a.Continent, a.PublishedAt });
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ShardKey).HasMaxLength(16);
+            entity.HasIndex(e => e.ShardKey);
+            entity.HasIndex(e => e.PublishedAt).IsDescending();
         });
     }
 }

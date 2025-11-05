@@ -8,21 +8,14 @@ using Serilog;
 using Shared;
 using StackExchange.Redis;
 
-
 var builder = WebApplication.CreateBuilder(args);
 
-
-
 builder.Host.UseSerilog((ctx, cfg) => cfg
-    .ReadFrom.Configuration(ctx.Configuration)
-);
-
+    .ReadFrom.Configuration(ctx.Configuration));
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-
-
 
 var redisConn = Environment.GetEnvironmentVariable("REDIS__CONNECTION") ?? "redis:6379";
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConn));
@@ -33,21 +26,12 @@ builder.Services.AddSingleton<IArticleCache>(sp =>
     return new RedisArticleCache(mux, TimeSpan.FromMinutes(30));
 });
 
-
-
-
-
 var app = builder.Build();
 
 _ = MonitorService.Log;
 
-
 app.UseSwagger();
 app.UseSwaggerUI();
-
-
-
-
 
 app.UseSerilogRequestLogging();
 app.UseHttpMetrics();   
@@ -56,20 +40,35 @@ app.MapControllers();
 app.MapMetrics();  
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-void EnsureSchemas(WebApplication app)
+// ---- ONLY RUN IF INIT_SCHEMA=true ----
+if (Environment.GetEnvironmentVariable("INIT_SCHEMA")?.Equals("true", StringComparison.OrdinalIgnoreCase) == true)
 {
-    var shards = app.Configuration.GetSection("Shards:ConnectionStrings")
-        .Get<Dictionary<string,string>>() ?? new();
-    foreach (var (_, cs) in shards)
+    void EnsureSchemas(WebApplication app)
     {
-        var opts = new DbContextOptionsBuilder<ArticleDbContext>()
-            .UseNpgsql(cs).Options;
-        using var db = new ArticleService.Data.ArticleDbContext(opts);
-        db.Database.EnsureCreated();
+        var log = MonitorService.Log.ForContext("component", "ArticleSchemaInit");
+        var shards = app.Configuration.GetSection("Shards:ConnectionStrings")
+            .Get<Dictionary<string,string>>() ?? new();
+        
+        log.Information("Article schema init: found {Count} shards", shards.Count);
+
+        foreach (var (name, cs) in shards)
+        {
+            try
+            {
+                var opts = new DbContextOptionsBuilder<ArticleDbContext>()
+                    .UseNpgsql(cs).Options;
+                using var db = new ArticleService.Data.ArticleDbContext(opts);
+                db.Database.EnsureCreated();
+                log.Information("Ensured schema on shard {Shard}", name);
+            }
+            catch (Exception ex)
+            {
+                log.Error(ex, "Failed to ensure schema on shard {Shard}", name);
+            }
+        }
     }
+
+    EnsureSchemas(app);
 }
-
-EnsureSchemas(app);
-
 
 app.Run();

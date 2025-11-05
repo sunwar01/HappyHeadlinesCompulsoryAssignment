@@ -1,40 +1,44 @@
 {
   "title": "Comments API Dashboard",
   "uid": "comments-api-dashboard",
-  "version": 1,
+  "version": 2,
   "timezone": "",
   "refresh": "5s",
   "schemaVersion": 38,
   "tags": [],
   "templating": { "list": [] },
-  "annotations": { "list": [ { "builtIn": 1, "datasource": { "type": "prometheus", "uid": "-- Mixed --" }, "enable": true, "hide": true, "iconColor": "rgba(0, 211, 255, 1)", "name": "Annotations & Alerts", "type": "dashboard" } ] },
+  "annotations": {
+    "list": [
+      { "builtIn": 1, "datasource": { "type": "prometheus", "uid": "-- Mixed --" }, "enable": true, "hide": true, "iconColor": "rgba(0, 211, 255, 1)", "name": "Annotations & Alerts", "type": "dashboard" }
+    ]
+  },
   "panels": [
     {
       "title": "Comments API Latency (P50/P95/P99)",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "df2miudsrpkowe" },
+      "datasource": { "type": "prometheus", "uid": "ff34t68qehypse" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "targets": [
-        { "expr": "histogram_quantile(0.50, sum(rate(comment_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P50", "refId": "A" },
-        { "expr": "histogram_quantile(0.95, sum(rate(comment_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P95", "refId": "B" },
-        { "expr": "histogram_quantile(0.99, sum(rate(comment_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P99", "refId": "C" }
+        { "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"comment-service\"}[5m])) by (le))", "legendFormat": "P50", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"comment-service\"}[5m])) by (le))", "legendFormat": "P95", "refId": "B" },
+        { "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"comment-service\"}[5m])) by (le))", "legendFormat": "P99", "refId": "C" }
       ],
-      "fieldConfig": { "defaults": { "unit": "s" } }
+      "fieldConfig": { "defaults": { "unit": "s", "color": { "mode": "palette-classic" }, "custom": { "drawStyle": "line", "fillOpacity": 10 } } }
     },
     {
       "title": "Cache Hit Ratio",
       "type": "gauge",
-      "datasource": { "type": "prometheus", "uid": "df2miudsrpkowe" },
+      "datasource": { "type": "prometheus", "uid": "ff34t68qehypse" },
       "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
       "targets": [
-        { "expr": "sum(comment_cache_hits_total) / (sum(comment_cache_hits_total) + sum(comment_cache_misses_total))", "refId": "A" }
+        { "expr": "sum(comment_cache_hits_total{job=\"comment-service\"}) / (sum(comment_cache_hits_total{job=\"comment-service\"}) + sum(comment_cache_misses_total{job=\"comment-service\"}))", "refId": "A" }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
           "thresholds": {
             "steps": [
-              { "color": "red", "value": null },
+              { "color": "red" },
               { "color": "yellow", "value": 0.6 },
               { "color": "green", "value": 0.8 }
             ]
@@ -45,37 +49,37 @@
     {
       "title": "CPU Usage",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "df2miudsrpkowe" },
+      "datasource": { "type": "prometheus", "uid": "ff34t68qehypse" },
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
       "targets": [
-        { "expr": "rate(process_cpu_seconds_total[5m]) * 100", "legendFormat": "CPU %", "refId": "A" }
+        { "expr": "avg(rate(process_cpu_seconds_total{job=\"comment-service\"}[5m])) * 100", "legendFormat": "CPU %", "refId": "A" }
       ],
       "fieldConfig": { "defaults": { "unit": "percent" } }
     },
     {
       "title": "Memory (Working Set)",
       "type": "stat",
-      "datasource": { "type": "prometheus", "uid": "df2miudsrpkowe" },
+      "datasource": { "type": "prometheus", "uid": "ff34t68qehypse" },
       "gridPos": { "h": 4, "w": 6, "x": 12, "y": 4 },
       "targets": [
-        { "expr": "process_working_set_bytes", "refId": "A" }
+        { "expr": "avg(process_working_set_bytes{job=\"comment-service\"})", "refId": "A" }
       ],
       "fieldConfig": { "defaults": { "unit": "bytes" } }
     },
     {
-      "title": "Service Status",
+      "title": "Comment Services UP",
       "type": "stat",
-      "datasource": { "type": "prometheus", "uid": "df2miudsrpkowe" },
+      "datasource": { "type": "prometheus", "uid": "ff34t68qehypse" },
       "gridPos": { "h": 3, "w": 3, "x": 21, "y": 0 },
       "targets": [
-        { "expr": "up{instance=\"localhost:5001\"}", "legendFormat": "Status", "refId": "A" }
+        { "expr": "sum(up{job=\"comment-service\"})", "legendFormat": "Instances Up", "refId": "A" }
       ],
       "fieldConfig": {
         "defaults": {
           "mappings": [
-            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" }, "2": { "text": "2/3", "color": "yellow" }, "3": { "text": "3/3", "color": "green" } }, "type": "value" }
           ],
-          "thresholds": { "steps": [ { "color": "red" }, { "color": "green", "value": 1 } ] }
+          "thresholds": { "steps": [ { "color": "red" }, { "color": "yellow", "value": 1 }, { "color": "green", "value": 3 } ] }
         }
       },
       "options": { "text": { "valueSize": 28 } }

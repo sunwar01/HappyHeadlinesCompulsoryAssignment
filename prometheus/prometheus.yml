@@ -2,12 +2,10 @@ global:
   scrape_interval: 5s
   scrape_timeout: 3s
   evaluation_interval: 5s
-
 scrape_configs:
   - job_name: prometheus
     static_configs:
       - targets: ['localhost:9090']
-
   - job_name: article-service
     metrics_path: /metrics
     static_configs:
@@ -17,7 +15,6 @@ scrape_configs:
           - article-service-3:8080
         labels:
           service: article
-
   - job_name: comment-service
     metrics_path: /metrics
     static_configs:
@@ -27,3 +24,19 @@ scrape_configs:
           - comment-service-3:8080
         labels:
           service: comment
+  - job_name: subscriber-service
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - subscriber-service-1:8080
+          - subscriber-service-2:8080
+          - subscriber-service-3:8080
+        labels:
+          service: subscriber
+  - job_name: newsletter-service
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - newsletter-service-1:8080
+        labels:
+          service: newsletter
