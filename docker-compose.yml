@@ -244,6 +244,21 @@ services:
       - redis
     networks:
       - app-net
+      
+      
+  profanity-service:
+    build:
+      context: .                    
+      dockerfile: ProfanityService/Dockerfile 
+    container_name: profanity-service
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+      - PROFANITY_DB=Host=profanity-db;Database=profanity;Username=postgres;Password=postgres
+    depends_on:
+      - profanity-db
+    networks:
+      - app-net
+      
   # --- Load balancer ---
   lb:
     build:
@@ -360,6 +375,17 @@ services:
     volumes:
       - antarctica-data:/var/lib/postgresql/data
       - ./ArticleService/migrations/init-articles.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - app-net
+      
+  profanity-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: profanity
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - profanity-data:/var/lib/postgresql/data
     networks:
       - app-net
   # --- Subscriber DB shards (z-axis: 7 continents + global) ---
@@ -553,3 +579,4 @@ volumes:
   redis-data:
   prometheus-data:
   grafana-data:
+  profanity-data:

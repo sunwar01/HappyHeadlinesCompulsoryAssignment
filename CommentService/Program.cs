@@ -1,7 +1,10 @@
 using CommentService.Cache;
 using CommentService.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Http.Resilience;
 using Npgsql;
+using Polly;
+
 using Prometheus;
 using Serilog;
 using Shared;
@@ -23,6 +26,27 @@ builder.Services.AddSingleton<ICommentCache>(sp =>
     var mux = sp.GetRequiredService<IConnectionMultiplexer>();
     return new RedisCommentCache(mux, TimeSpan.FromMinutes(30), capacity: 30);
 });
+
+
+builder.Services.AddHttpClient("ProfanityClient", client =>
+    {
+        client.BaseAddress = new Uri("http://profanity-service:8080");
+        client.Timeout = Timeout.InfiniteTimeSpan;   // 👈 rely on Polly's timeout instead
+    })
+    .AddResilienceHandler("ProfanityPipeline", pipeline =>
+    {
+        pipeline.AddRetry(new() { MaxRetryAttempts = 3 });
+
+        pipeline.AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
+        {
+            FailureRatio = 0.5,
+            SamplingDuration = TimeSpan.FromSeconds(10),
+            MinimumThroughput = 2,
+            BreakDuration = TimeSpan.FromSeconds(30)
+        });
+
+        pipeline.AddTimeout(TimeSpan.FromSeconds(5));
+    });
 
 var app = builder.Build();
 

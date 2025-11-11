@@ -6,10 +6,12 @@ using CommentService.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Polly.CircuitBreaker;
 using Prometheus;
 using Shared;
 using StackExchange.Redis;
 using ILogger = Serilog.ILogger;
+using Polly.Timeout; 
 
 namespace CommentService.Controllers;
 
@@ -17,6 +19,7 @@ namespace CommentService.Controllers;
 [Route("api/{region}/articles/{articleId:guid}/[controller]")]
 public class CommentsController : ControllerBase
 {
+    private readonly IHttpClientFactory _httpFactory;
     private readonly ShardMap _shards;
     private readonly IDatabase _cache;
     private static readonly ILogger Log = MonitorService.Log.ForContext<CommentsController>();
@@ -61,7 +64,7 @@ public class CommentsController : ControllerBase
         CREATE INDEX IF NOT EXISTS "IX_Comments_ArticleId" ON public."Comments" ("ArticleId");
         """;
 
-    public CommentsController(IConfiguration cfg, IConnectionMultiplexer redis)
+    public CommentsController(IConfiguration cfg, IConnectionMultiplexer redis, IHttpClientFactory httpFactory)
     {
         _shards = new ShardMap
         {
@@ -69,6 +72,7 @@ public class CommentsController : ControllerBase
                                    .Get<Dictionary<string, string>>() ?? new()
         };
         _cache = redis.GetDatabase();
+        _httpFactory = httpFactory;
     }
 
     private static string ListKey(string region, Guid articleId) => $"comments:{region}:{articleId}";
@@ -292,17 +296,57 @@ public class CommentsController : ControllerBase
     }
 
     // ── POST /api/{region}/articles/{articleId}/comments ─────────────────────
-    [HttpPost]
-    public Task<IActionResult> Create(
-        [FromRoute] string region,
-        [FromRoute] Guid articleId,
-        [FromBody] CommentCreateDto dto,
-        CancellationToken ct = default)
+ [HttpPost]
+public async Task<IActionResult> Create(
+    [FromRoute] string region,
+    [FromRoute] Guid articleId,
+    [FromBody] CommentCreateDto dto,
+    CancellationToken ct = default)
+{
+    try
     {
-        return Measure("create", async token =>
+        return await Measure("create", async token =>
         {
             var cs = Shards.PickConnection(region, _shards);
             await EnsureShardSchemaAsync(cs, token);
+
+            var client = _httpFactory.CreateClient("ProfanityClient");
+            var profanityReq = new { text = dto.Text };
+            ProfanityResult? result = null;
+
+            try
+            {
+                var resp = await client.PostAsJsonAsync("/api/profanity/check", profanityReq, token);
+                if (resp.IsSuccessStatusCode)
+                {
+                    result = await resp.Content.ReadFromJsonAsync<ProfanityResult>(cancellationToken: token);
+                }
+                else
+                {
+                    Log.Warning("Profanity check failed (Status: {StatusCode}). Allowing comment.", resp.StatusCode);
+                }
+            }
+            catch (BrokenCircuitException ex)
+            {
+                Log.Warning("CIRCUIT BREAKER OPEN: {Message}. Allowing comment.", ex.Message);
+            }
+            catch (TimeoutRejectedException ex)            
+            {
+                Log.Warning(ex, "Polly timeout hit. Allowing comment.");
+            }
+            catch (HttpRequestException ex)
+            {
+                Log.Warning(ex, "Profanity service unreachable. Allowing comment.");
+            }
+            catch (TaskCanceledException ex) when (!ex.CancellationToken.IsCancellationRequested)
+            {
+                Log.Warning(ex, "HttpClient timeout. Allowing comment.");
+            }
+
+            if (result?.IsProfane == true)
+            {
+                return BadRequest(new { error = "Profanity detected", matches = result.Matches });
+            }
 
             await using var db = Ctx(region);
             var entity = new Comment
@@ -328,6 +372,12 @@ public class CommentsController : ControllerBase
             return CreatedAtAction(nameof(Get), new { region, articleId, id = entity.Id }, entity);
         }, ct);
     }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Unhandled error in Create action");
+        return StatusCode(500, new { error = "Internal error" });
+    }
+}
 
     // ── PUT /api/{region}/articles/{articleId}/comments/{id} ─────────────────
     [HttpPut("{id:guid}")]

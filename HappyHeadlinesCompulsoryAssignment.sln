@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SubscriberService", "Subscr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NewsletterService", "NewsletterService\NewsletterService.csproj", "{CD8F7073-B6FB-4F39-A340-9BE730CB4EFD}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProfanityService", "ProfanityService\ProfanityService.csproj", "{697A3F00-1F60-4F6A-9257-DC51D4816BE1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -36,5 +38,9 @@ Global
 		{CD8F7073-B6FB-4F39-A340-9BE730CB4EFD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CD8F7073-B6FB-4F39-A340-9BE730CB4EFD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CD8F7073-B6FB-4F39-A340-9BE730CB4EFD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{697A3F00-1F60-4F6A-9257-DC51D4816BE1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{697A3F00-1F60-4F6A-9257-DC51D4816BE1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{697A3F00-1F60-4F6A-9257-DC51D4816BE1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{697A3F00-1F60-4F6A-9257-DC51D4816BE1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
