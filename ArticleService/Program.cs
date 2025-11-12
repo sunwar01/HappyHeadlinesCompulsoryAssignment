@@ -1,17 +1,25 @@
+// ArticleService/Program.cs
 using ArticleService.Background;
 using ArticleService.Cache;
 using ArticleService.Data;
 using ArticleService.Models;
 using Microsoft.EntityFrameworkCore;
-using Prometheus;   
+using OpenTelemetry;
+using OpenTelemetry.Context.Propagation;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using Prometheus;
 using Serilog;
 using Shared;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Host.UseSerilog((ctx, cfg) => cfg
-    .ReadFrom.Configuration(ctx.Configuration));
+// Serilog
+builder.Host.UseSerilog((ctx, cfg) => cfg.ReadFrom.Configuration(ctx.Configuration));
+
+// Force W3C propagation
+Sdk.SetDefaultTextMapPropagator(new TraceContextPropagator());
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -26,6 +34,20 @@ builder.Services.AddSingleton<IArticleCache>(sp =>
     return new RedisArticleCache(mux, TimeSpan.FromMinutes(30));
 });
 
+builder.Services.AddHostedService<ArticleQueueWorker>();
+
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(r => r.AddService("ArticleService"))
+    .WithTracing(t => t
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        // Leave Redis instrumentation OFF here to avoid XREADGROUP span spam
+        .AddSource("ArticleService.Worker")
+        .AddSource("Npgsql")
+        .SetSampler(new AlwaysOnSampler())
+        .AddZipkinExporter(o => o.Endpoint = new Uri("http://zipkin:9411/api/v2/spans"))
+    );
+
 var app = builder.Build();
 
 _ = MonitorService.Log;
@@ -34,30 +56,27 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseSerilogRequestLogging();
-app.UseHttpMetrics();   
+app.UseHttpMetrics();
 app.UseMetricServer();
 app.MapControllers();
-app.MapMetrics();  
+app.MapMetrics();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-// ---- ONLY RUN IF INIT_SCHEMA=true ----
+// optional: schema init (unchanged)
 if (Environment.GetEnvironmentVariable("INIT_SCHEMA")?.Equals("true", StringComparison.OrdinalIgnoreCase) == true)
 {
     void EnsureSchemas(WebApplication app)
     {
         var log = MonitorService.Log.ForContext("component", "ArticleSchemaInit");
-        var shards = app.Configuration.GetSection("Shards:ConnectionStrings")
-            .Get<Dictionary<string,string>>() ?? new();
-        
+        var shards = app.Configuration.GetSection("Shards:ConnectionStrings").Get<Dictionary<string,string>>() ?? new();
         log.Information("Article schema init: found {Count} shards", shards.Count);
 
         foreach (var (name, cs) in shards)
         {
             try
             {
-                var opts = new DbContextOptionsBuilder<ArticleDbContext>()
-                    .UseNpgsql(cs).Options;
-                using var db = new ArticleService.Data.ArticleDbContext(opts);
+                var opts = new DbContextOptionsBuilder<ArticleDbContext>().UseNpgsql(cs).Options;
+                using var db = new ArticleDbContext(opts);
                 db.Database.EnsureCreated();
                 log.Information("Ensured schema on shard {Shard}", name);
             }
@@ -67,7 +86,6 @@ if (Environment.GetEnvironmentVariable("INIT_SCHEMA")?.Equals("true", StringComp
             }
         }
     }
-
     EnsureSchemas(app);
 }
 

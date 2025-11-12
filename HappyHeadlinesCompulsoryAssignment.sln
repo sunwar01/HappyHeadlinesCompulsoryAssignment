@@ -12,6 +12,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NewsletterService", "Newsle
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProfanityService", "ProfanityService\ProfanityService.csproj", "{697A3F00-1F60-4F6A-9257-DC51D4816BE1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PublisherService", "PublisherService\PublisherService.csproj", "{D303A410-7761-46A7-9B12-EF0813DB31BE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -42,5 +44,9 @@ Global
 		{697A3F00-1F60-4F6A-9257-DC51D4816BE1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{697A3F00-1F60-4F6A-9257-DC51D4816BE1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{697A3F00-1F60-4F6A-9257-DC51D4816BE1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D303A410-7761-46A7-9B12-EF0813DB31BE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D303A410-7761-46A7-9B12-EF0813DB31BE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D303A410-7761-46A7-9B12-EF0813DB31BE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D303A410-7761-46A7-9B12-EF0813DB31BE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

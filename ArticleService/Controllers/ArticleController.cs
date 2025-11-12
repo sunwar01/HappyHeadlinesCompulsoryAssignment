@@ -58,6 +58,7 @@ public class ArticlesController : ControllerBase
 
     private ArticleDbContext Ctx(string region)
     {
+        region = (region ?? "global").ToLowerInvariant();
         var cs = Shards.PickConnection(region, _shards);
         var dbOpts = new DbContextOptionsBuilder<ArticleDbContext>().UseNpgsql(cs).Options;
         return new ArticleDbContext(dbOpts);
@@ -65,7 +66,7 @@ public class ArticlesController : ControllerBase
 
     private async Task<ActionResult<T>> Measure<T>(string endpoint, Func<CancellationToken, Task<ActionResult<T>>> work, CancellationToken ct = default)
     {
-        var region = (string)RouteData.Values["region"]!;
+        var routeRegion = ((string)RouteData.Values["region"]!)?.ToLowerInvariant() ?? "global";
         var method = HttpContext.Request.Method;
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -80,28 +81,28 @@ public class ArticlesController : ControllerBase
             };
 
             RequestDuration
-                .WithLabels(region, method, endpoint, status)
+                .WithLabels(routeRegion, method, endpoint, status)
                 .Observe(sw.Elapsed.TotalSeconds);
 
             if (status.StartsWith('5'))
-                HttpErrors.WithLabels(region, endpoint).Inc();
+                HttpErrors.WithLabels(routeRegion, endpoint).Inc();
 
             return result;
         }
         catch (Exception ex) when (!(ex is OperationCanceledException))
         {
             RequestDuration
-                .WithLabels(region, method, endpoint, "500")
+                .WithLabels(routeRegion, method, endpoint, "500")
                 .Observe(sw.Elapsed.TotalSeconds);
 
-            HttpErrors.WithLabels(region, endpoint).Inc();
+            HttpErrors.WithLabels(routeRegion, endpoint).Inc();
             throw;
         }
     }
 
     private async Task<IActionResult> Measure(string endpoint, Func<CancellationToken, Task<IActionResult>> work, CancellationToken ct = default)
     {
-        var region = (string)RouteData.Values["region"]!;
+        var routeRegion = ((string)RouteData.Values["region"]!)?.ToLowerInvariant() ?? "global";
         var method = HttpContext.Request.Method;
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -116,21 +117,21 @@ public class ArticlesController : ControllerBase
             };
 
             RequestDuration
-                .WithLabels(region, method, endpoint, status)
+                .WithLabels(routeRegion, method, endpoint, status)
                 .Observe(sw.Elapsed.TotalSeconds);
 
             if (status.StartsWith('5'))
-                HttpErrors.WithLabels(region, endpoint).Inc();
+                HttpErrors.WithLabels(routeRegion, endpoint).Inc();
 
             return result;
         }
         catch (Exception ex) when (!(ex is OperationCanceledException))
         {
             RequestDuration
-                .WithLabels(region, method, endpoint, "500")
+                .WithLabels(routeRegion, method, endpoint, "500")
                 .Observe(sw.Elapsed.TotalSeconds);
 
-            HttpErrors.WithLabels(region, endpoint).Inc();
+            HttpErrors.WithLabels(routeRegion, endpoint).Inc();
             throw;
         }
     }
@@ -139,6 +140,8 @@ public class ArticlesController : ControllerBase
     public Task<ActionResult<IEnumerable<Article>>> List(
         [FromRoute] string region, [FromQuery] int skip = 0, [FromQuery] int take = 20, CancellationToken ct = default)
     {
+        region = (region ?? "global").ToLowerInvariant();
+
         return Measure<IEnumerable<Article>>("list", async token =>
         {
             take = Math.Clamp(take, 1, 100);
@@ -197,6 +200,7 @@ public class ArticlesController : ControllerBase
                         await using var db = Ctx(region);
                         var fetched = await db.Articles
                             .Where(a => dbMissIds.Contains(a.Id))
+                            .AsNoTracking()
                             .ToListAsync(token);
 
                         foreach (var a in fetched)
@@ -266,6 +270,8 @@ public class ArticlesController : ControllerBase
     [HttpGet("{id:guid}")]
     public Task<ActionResult<Article>> Get([FromRoute] string region, Guid id, CancellationToken ct = default)
     {
+        region = (region ?? "global").ToLowerInvariant();
+
         return Measure<Article>("get", async token =>
         {
             try
@@ -284,7 +290,7 @@ public class ArticlesController : ControllerBase
             }
 
             await using var db = Ctx(region);
-            var item = await db.Articles.FirstOrDefaultAsync(a => a.Id == id, token);
+            var item = await db.Articles.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id, token);
             if (item is null) return NotFound();
 
             ArticleCacheMisses.WithLabels(region, "get").Inc();
@@ -306,6 +312,8 @@ public class ArticlesController : ControllerBase
     [HttpPost]
     public Task<IActionResult> Create([FromRoute] string region, [FromBody] ArticleCreateDto dto, CancellationToken ct = default)
     {
+        region = (region ?? "global").ToLowerInvariant();
+
         return Measure("create", async token =>
         {
             await using var db = Ctx(region);
@@ -339,6 +347,8 @@ public class ArticlesController : ControllerBase
     [HttpPut("{id:guid}")]
     public Task<IActionResult> Update([FromRoute] string region, Guid id, [FromBody] ArticleCreateDto dto, CancellationToken ct = default)
     {
+        region = (region ?? "global").ToLowerInvariant();
+
         return Measure("update", async token =>
         {
             await using var db = Ctx(region);
@@ -368,6 +378,8 @@ public class ArticlesController : ControllerBase
     [HttpDelete("{id:guid}")]
     public Task<IActionResult> Delete([FromRoute] string region, Guid id, CancellationToken ct = default)
     {
+        region = (region ?? "global").ToLowerInvariant();
+
         return Measure("delete", async token =>
         {
             await using var db = Ctx(region);

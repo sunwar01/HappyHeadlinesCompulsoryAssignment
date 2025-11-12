@@ -1,5 +1,76 @@
+version: "3.9"
+
 services:
-  # --- ArticleService (x-axis: 3 instances) ---
+  zipkin:
+    image: openzipkin/zipkin:2.24
+    container_name: zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - app-net
+
+  seq:
+    image: datalust/seq:2024.3
+    container_name: seq
+    environment:
+      - ACCEPT_EULA=Y
+    ports:
+      - "5341:80"
+    networks:
+      - app-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    command: ["redis-server","--save","","--appendonly","no"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-net
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=3d
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus-data:/prometheus
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - article-service-1
+      - article-service-2
+      - article-service-3
+      - comment-service-1
+      - comment-service-2
+      - comment-service-3
+      - subscriber-service-1
+      - subscriber-service-2
+      - subscriber-service-3
+      - newsletter-service-1
+    networks:
+      - app-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - app-net
+
   article-service-1:
     build:
       context: .
@@ -22,6 +93,7 @@ services:
       - redis
     networks:
       - app-net
+
   article-service-2:
     build:
       context: .
@@ -44,6 +116,7 @@ services:
       - redis
     networks:
       - app-net
+
   article-service-3:
     build:
       context: .
@@ -67,7 +140,7 @@ services:
       - redis
     networks:
       - app-net
-  # --- CommentService (x-axis: 3 instances) ---
+
   comment-service-1:
     build:
       context: .
@@ -90,6 +163,7 @@ services:
       - redis
     networks:
       - app-net
+
   comment-service-2:
     build:
       context: .
@@ -112,6 +186,7 @@ services:
       - redis
     networks:
       - app-net
+
   comment-service-3:
     build:
       context: .
@@ -135,7 +210,7 @@ services:
       - redis
     networks:
       - app-net
-  # --- SubscriberService (x-axis: 3 instances) ---
+
   subscriber-service-1:
     build:
       context: .
@@ -166,6 +241,7 @@ services:
       - redis
     networks:
       - app-net
+
   subscriber-service-2:
     build:
       context: .
@@ -197,6 +273,7 @@ services:
       - redis
     networks:
       - app-net
+
   subscriber-service-3:
     build:
       context: .
@@ -229,7 +306,7 @@ services:
       - redis
     networks:
       - app-net
-  # --- NewsletterService (1 instance) ---
+
   newsletter-service-1:
     build:
       context: .
@@ -244,12 +321,28 @@ services:
       - redis
     networks:
       - app-net
-      
-      
+
+  publisher-service:
+    build:
+      context: .
+      dockerfile: PublisherService/Dockerfile
+    container_name: publisher-service
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__Redis=redis:6379
+      - SEQ__URL=http://seq:5341
+      - ZIPKIN__ENDPOINT=http://zipkin:9411/api/v2/spans
+    depends_on:
+      - redis
+    ports:
+      - "8084:8080"
+    networks:
+      - app-net
+
   profanity-service:
     build:
-      context: .                    
-      dockerfile: ProfanityService/Dockerfile 
+      context: .
+      dockerfile: ProfanityService/Dockerfile
     container_name: profanity-service
     environment:
       - ASPNETCORE_URLS=http://+:8080
@@ -258,8 +351,7 @@ services:
       - profanity-db
     networks:
       - app-net
-      
-  # --- Load balancer ---
+
   lb:
     build:
       context: .
@@ -278,9 +370,10 @@ services:
       - subscriber-service-2
       - subscriber-service-3
       - newsletter-service-1
+      - publisher-service
     networks:
       - app-net
-  # --- Postgres shards (z-axis: 7 continents + global) ---
+
   global-db:
     image: postgres:16-alpine
     container_name: global-db
@@ -293,6 +386,7 @@ services:
       - ./ArticleService/migrations/init-articles.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
+
   europe-db:
     image: postgres:16-alpine
     container_name: europe-db
@@ -305,6 +399,7 @@ services:
       - ./ArticleService/migrations/init-articles.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
+
   asia-db:
     image: postgres:16-alpine
     container_name: asia-db
@@ -317,6 +412,7 @@ services:
       - ./ArticleService/migrations/init-articles.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
+
   africa-db:
     image: postgres:16-alpine
     container_name: africa-db
@@ -329,6 +425,7 @@ services:
       - ./ArticleService/migrations/init-articles.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
+
   northamerica-db:
     image: postgres:16-alpine
     container_name: northamerica-db
@@ -341,6 +438,7 @@ services:
       - ./ArticleService/migrations/init-articles.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
+
   southamerica-db:
     image: postgres:16-alpine
     container_name: southamerica-db
@@ -353,6 +451,7 @@ services:
       - ./ArticleService/migrations/init-articles.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
+
   australia-db:
     image: postgres:16-alpine
     container_name: australia-db
@@ -365,6 +464,7 @@ services:
       - ./ArticleService/migrations/init-articles.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
+
   antarctica-db:
     image: postgres:16-alpine
     container_name: antarctica-db
@@ -377,7 +477,7 @@ services:
       - ./ArticleService/migrations/init-articles.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
-      
+
   profanity-db:
     image: postgres:16-alpine
     environment:
@@ -388,7 +488,7 @@ services:
       - profanity-data:/var/lib/postgresql/data
     networks:
       - app-net
-  # --- Subscriber DB shards (z-axis: 7 continents + global) ---
+
   global-subscriber-db:
     image: postgres:16-alpine
     container_name: global-subscriber-db
@@ -401,6 +501,7 @@ services:
       - ./SubscriberService/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
+
   europe-subscriber-db:
     image: postgres:16-alpine
     container_name: europe-subscriber-db
@@ -413,6 +514,7 @@ services:
       - ./SubscriberService/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
+
   asia-subscriber-db:
     image: postgres:16-alpine
     container_name: asia-subscriber-db
@@ -425,6 +527,7 @@ services:
       - ./SubscriberService/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
+
   africa-subscriber-db:
     image: postgres:16-alpine
     container_name: africa-subscriber-db
@@ -437,6 +540,7 @@ services:
       - ./SubscriberService/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
+
   northamerica-subscriber-db:
     image: postgres:16-alpine
     container_name: northamerica-subscriber-db
@@ -449,6 +553,7 @@ services:
       - ./SubscriberService/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
+
   southamerica-subscriber-db:
     image: postgres:16-alpine
     container_name: southamerica-subscriber-db
@@ -461,6 +566,7 @@ services:
       - ./SubscriberService/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
+
   australia-subscriber-db:
     image: postgres:16-alpine
     container_name: australia-subscriber-db
@@ -473,6 +579,7 @@ services:
       - ./SubscriberService/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
+
   antarctica-subscriber-db:
     image: postgres:16-alpine
     container_name: antarctica-subscriber-db
@@ -485,80 +592,11 @@ services:
       - ./SubscriberService/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - app-net
-  # --- Observability ---
-  zipkin:
-    image: openzipkin/zipkin:2.24
-    container_name: zipkin
-    ports:
-      - "9411:9411"
-    networks:
-      - app-net
-  seq:
-    image: datalust/seq:2024.3
-    container_name: seq
-    environment:
-      - ACCEPT_EULA=Y
-    ports:
-      - "5341:80"
-    networks:
-      - app-net
-  # --- Redis (cache) ---
-  redis:
-    image: redis:7-alpine
-    container_name: redis
-    command: ["redis-server","--save","","--appendonly","no"]
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    networks:
-      - app-net
-  # --- Prometheus (metrics) ---
-  prometheus:
-    image: prom/prometheus:v2.54.1
-    container_name: prometheus
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.path=/prometheus
-      - --storage.tsdb.retention.time=3d
-    ports:
-      - "9090:9090"
-    volumes:
-      - prometheus-data:/prometheus
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    depends_on:
-      - article-service-1
-      - article-service-2
-      - article-service-3
-      - comment-service-1
-      - comment-service-2
-      - comment-service-3
-      - subscriber-service-1
-      - subscriber-service-2
-      - subscriber-service-3
-      - newsletter-service-1
-    networks:
-      - app-net
-  # --- Grafana ---
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    volumes:
-      - grafana-data:/var/lib/grafana
-    depends_on:
-      - prometheus
-    networks:
-      - app-net
-# --- Networks ---
+
 networks:
   app-net:
     driver: bridge
-# --- Volumes ---
+
 volumes:
   global-data:
   europe-data:

@@ -1,6 +1,8 @@
 // Program.cs in NewsletterService
 
 using NewsletterService.Background;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Prometheus;
 using Serilog;
 using StackExchange.Redis;
@@ -24,6 +26,14 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     ConnectionMultiplexer.Connect(redisConn));
 
 builder.Services.AddHostedService<SubscriberQueueWorker>();
+
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(r => r.AddService("NewsletterService"))
+    .WithTracing(t => t
+        .AddAspNetCoreInstrumentation()
+        .AddRedisInstrumentation()
+        .AddOtlpExporter());
+
 
 var app = builder.Build();
 
